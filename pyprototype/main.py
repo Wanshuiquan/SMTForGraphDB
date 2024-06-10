@@ -12,6 +12,8 @@ class Graph:
         self.nodes.add(node)
         if node not in self.adjacency_map:
             self.adjacency_map[node] = []
+
+# get the path between two nodes 
     def get_path(self, node1, node2):
         try:
             assert node1 in self.adjacency_map and node2 in self.adjacency_map
@@ -89,6 +91,10 @@ class Automaton:
         return f"Initial State: {self.initial_state}, Transitions:\n{transitions_str}, Final States: {self.final_states}"
 
 def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton) -> bool:
+    state = aut.initial_state
+    for vertex in path: 
+        pass 
+def query_with_macro(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
     pass 
 def create_global_var(var_name, type):
         if type == "Real":
