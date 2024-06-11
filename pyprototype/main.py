@@ -92,8 +92,19 @@ class Automaton:
 
 def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton) -> bool:
     state = aut.initial_state
-    for vertex in path: 
-        pass 
+    formula = z3.BoolVal(True)
+    def explore(path:List[int], state):
+        if len(path) == 0: 
+            is_in_final = state in aut.final_states 
+            return z3.BoolVal(is_in_final)
+        else: 
+            vertex = path.pop(0)
+            transitions =  list(map(lambda x: x.from_state ==  state, aut.transitions))
+            if len(transitions) == 0:
+                is_in_final = state in aut.final_states 
+                return z3.BoolVal(is_in_final)
+            else:
+                pass
 def query_with_macro(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
     pass 
 def create_global_var(var_name, type):
