@@ -2,7 +2,7 @@
 import json
 import z3
 from typing import List
-
+from dataclasses import dataclass 
 class Graph:
     def __init__(self):
         self.nodes = set()
@@ -90,11 +90,33 @@ class Automaton:
         transitions_str = "\n".join(str(transition) for transition in self.transitions)
         return f"Initial State: {self.initial_state}, Transitions:\n{transitions_str}, Final States: {self.final_states}"
 
-def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton) -> bool:
+@dataclass(frozen=True)
+class LIA: ... 
+@dataclass(frozen=True)
+class STR: ...
+def identify_sort(constraint):
+    if "\"" in constraint:
+        return STR()
+    else:
+        return LIA()
+    
+def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton) -> z3.Model:
     state = aut.initial_state
-    for vertex in path: 
-        pass 
-def query_with_macro(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
+    formula = z3.BoolVal(True)
+    def explore(path:List[int], state):
+        if len(path) == 0:
+            acc = state in aut.final_states 
+            return z3.BoolVal(acc)
+        else:
+            vertex = path.pop()
+            vertex_atrribute = attr.attribute_map[vertex]
+
+            transitions = list(map(lambda x: x.from_state == state, aut.transitions))
+            ## Diverge Cases ####
+            for cond in transitions:
+                pass 
+       
+def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
     pass 
 def create_global_var(var_name, type):
         if type == "Real":
