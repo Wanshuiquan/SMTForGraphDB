@@ -99,22 +99,32 @@ def identify_sort(constraint):
         return STR()
     else:
         return LIA()
-    
+
+# explore path, state   
+#         nil   state ::=  is_final_state(nil)
+#        cons v::p state ::=  curr(v, state) and explore()
 def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton) -> z3.Model:
     state = aut.initial_state
     formula = z3.BoolVal(True)
+    
     def explore(path:List[int], state):
         if len(path) == 0:
             acc = state in aut.final_states 
             return z3.BoolVal(acc)
         else:
-            vertex = path.pop()
+            vertex = path.pop(0)
             vertex_atrribute = attr.attribute_map[vertex]
 
             transitions = list(map(lambda x: x.from_state == state, aut.transitions))
             ## Diverge Cases ####
-            for cond in transitions:
-                pass 
+            if len(transitions) == 1:
+                curr 
+                formula = z3.And(formula, explore())
+            elif len(transitions) == 0:
+                acc = state in aut.final_states 
+                return z3.BoolVal(acc)
+            else:
+                formula = z3.And(formula, z3.Or())
        
 def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
     pass 
