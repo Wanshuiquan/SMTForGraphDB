@@ -106,7 +106,7 @@ def identify_sort(constraint):
 #        cons v::p state ::=  curr(v, state) and explore()
 def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton):
         def substitute(formulas, vertex_attribute:Dict):
-                curr = z3.parse_smt2_string(formulas,decls=attr.alphabet)
+                curr = z3.parse_smt2_string(formulas,dels=attr.alphabet)
                 for attribute in vertex_atrribute.keys():
                     if vertex_atrribute[attribute] != None:
                         var_name = attr.alphabet(attribute)
