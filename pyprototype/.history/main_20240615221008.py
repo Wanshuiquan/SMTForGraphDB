@@ -142,10 +142,12 @@ def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_d
 
 
 def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, vars) -> z3.Model:
+
     solver = z3.Solver()
+
     f = explore_path(path, aut.initial_state,attr, aut, vars)
     solver.add(f)
-    return solver.check()
+    return solver.model()
        
 def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
     pass 
@@ -204,7 +206,7 @@ def parse_json_file(file_path):
 
 if __name__ == '__main__':
     solver = z3.Solver()
-    file_path = 'example2.json'  # Path to your JSON file
+    file_path = 'example1.json'  # Path to your JSON file
 
     # Parse JSON file
     parsed_graph, parsed_attributes, parsed_automaton, global_vars = parse_json_file(file_path)
@@ -217,7 +219,7 @@ if __name__ == '__main__':
     print("Formula: ", parsed_automaton.transitions[0].formula)
     print("Global Vars", global_vars)
     all_variables = merge_dicts(parsed_attributes.alphabet, global_vars)
-    print("Query:", query_naive_algorithm(['1','2','3','4'],  parsed_attributes, parsed_automaton, all_variables) )
+    print("Query:", query_naive_algorithm(['1','2','3','1'],  parsed_attributes, parsed_automaton, all_variables) )
 
     # Parse smt2 string with declared vars; returns vector of assertions, in our case always 1
     test0 = z3.parse_smt2_string(parsed_automaton.transitions[0].formula, decls=all_variables)[0]
