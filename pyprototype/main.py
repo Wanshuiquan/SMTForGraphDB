@@ -1,8 +1,9 @@
 # !/bin/env python3
 import json
 import z3
-from typing import List
-
+from typing import List, Tuple
+from dataclasses import dataclass 
+import string 
 class Graph:
     def __init__(self):
         self.nodes = set()
@@ -90,22 +91,63 @@ class Automaton:
         transitions_str = "\n".join(str(transition) for transition in self.transitions)
         return f"Initial State: {self.initial_state}, Transitions:\n{transitions_str}, Final States: {self.final_states}"
 
-def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton) -> bool:
-    state = aut.initial_state
-    formula = z3.BoolVal(True)
-    def explore(path:List[int], state):
-        if len(path) == 0: 
-            is_in_final = state in aut.final_states 
-            return z3.BoolVal(is_in_final)
-        else: 
+@dataclass(frozen=True)
+class LIA: ... 
+@dataclass(frozen=True)
+class STR: ...
+def identify_sort(constraint):
+    if "\"" in constraint:
+        return STR()
+    else:
+        return LIA()
+
+# explore path, state   
+#         nil   state ::=  is_final_state(nil)
+#        cons v::p state ::=  curr(v, state) and explore()
+def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_dict):
+        def substitute(formulas, vertex_attribute):
+                curr = z3.parse_smt2_string(formulas,decls=var_dict)[0]
+                keys = list(attr.alphabet.keys())
+                for index in range(len(keys)):
+                    attribute = keys[index]
+                    if vertex_atrribute[index] != None:
+                        var_name = attr.alphabet[attribute]
+                        val = vertex_atrribute[index]
+                        if isinstance(val, str):
+                           curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
+                        else:
+                            curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
+                return curr 
+        if len(path) == 0:
+            acc = state in aut.final_states 
+            return z3.BoolVal(acc)
+        else:
             vertex = path.pop(0)
-            transitions =  list(map(lambda x: x.from_state ==  state, aut.transitions))
-            if len(transitions) == 0:
-                is_in_final = state in aut.final_states 
-                return z3.BoolVal(is_in_final)
+            vertex_atrribute = attr.attribute_map[vertex]
+
+            transitions: List[AutomatonTransition] = list(filter(lambda x: x.from_state == state, aut.transitions))
+            ## Diverge Cases ####
+            if len(transitions) == 1:
+                curr = substitute(transitions[0].formula, vertex_atrribute)
+                return z3.And(curr, explore_path(path, transitions[0].to_state,attr, aut, var_dict))
+            elif len(transitions) == 0:
+                acc = state in aut.final_states 
+                return z3.BoolVal(acc)
             else:
-                pass
-def query_with_macro(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
+                braches = list(map(
+                        lambda x: z3.And(substitute(x.formula, vertex_atrribute), explore_path(path, x.to_state, attr, aut, var_dict)),
+                                   transitions))
+                return z3.Or(braches)
+
+
+
+def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, vars) -> z3.Model:
+    solver = z3.Solver()
+    f = explore_path(path, aut.initial_state,attr, aut, vars)
+    solver.add(f)
+    return solver.check()
+       
+def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
     pass 
 def create_global_var(var_name, type):
         if type == "Real":
@@ -162,7 +204,7 @@ def parse_json_file(file_path):
 
 if __name__ == '__main__':
     solver = z3.Solver()
-    file_path = 'example1.json'  # Path to your JSON file
+    file_path = 'example2.json'  # Path to your JSON file
 
     # Parse JSON file
     parsed_graph, parsed_attributes, parsed_automaton, global_vars = parse_json_file(file_path)
@@ -174,8 +216,9 @@ if __name__ == '__main__':
     print("Alphabet: ", parsed_attributes.alphabet)
     print("Formula: ", parsed_automaton.transitions[0].formula)
     print("Global Vars", global_vars)
-    print("Path:",parsed_graph.get_path(1, 3) )
     all_variables = merge_dicts(parsed_attributes.alphabet, global_vars)
+    print("Query:", query_naive_algorithm(['1','2','3','4'],  parsed_attributes, parsed_automaton, all_variables) )
+
     # Parse smt2 string with declared vars; returns vector of assertions, in our case always 1
     test0 = z3.parse_smt2_string(parsed_automaton.transitions[0].formula, decls=all_variables)[0]
     solver.add(test0)
