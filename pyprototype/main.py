@@ -1,7 +1,7 @@
 # !/bin/env python3
 import json
 import z3
-from typing import List, Tuple
+from typing import List, Tuple, Dict 
 from dataclasses import dataclass 
 import string 
 class Graph:
@@ -110,7 +110,7 @@ def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_d
                 keys = list(attr.alphabet.keys())
                 for index in range(len(keys)):
                     attribute = keys[index]
-                    if vertex_atrribute[index] != None:
+                    if vertex_attribute[index] != None:
                         var_name = attr.alphabet[attribute]
                         val = vertex_atrribute[index]
                         if isinstance(val, str):
@@ -141,14 +141,86 @@ def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_d
 
 
 
-def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, vars) -> z3.Model:
+def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, vars):
     solver = z3.Solver()
     f = explore_path(path, aut.initial_state,attr, aut, vars)
     solver.add(f)
-    return solver.check()
-       
-def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton) -> bool:
-    pass 
+    match solver.check():
+        case z3.sat:
+            f = solver.model()
+            print(f)
+            return f 
+        case _:
+            return solver.check()
+
+VarBound = Dict[str, Tuple[int, int]]
+@dataclass
+class MacroState:
+    state: str 
+    vars: Dict 
+    para_bound: VarBound 
+
+def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
+    def update_macro_state(vertex_attribute, macro:MacroState, transition:AutomatonTransition) -> MacroState:
+                solver = z3.Solver()
+                formula = transition.formula
+                curr = z3.parse_smt2_string(formula,decls=parameter)[0]
+                keys = list(attr.alphabet.keys())
+                for index in range(len(keys)):
+                    attribute = keys[index]
+                    if vertex_attribute[index] != None:
+                        var_name = attr.alphabet[attribute]
+                        val = vertex_atrribute[index]
+                        if isinstance(val, str):
+                           curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
+                        else:
+                            curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
+                
+                for para in macro.para_bound.keys():
+                    low, up = macro.para_bound[para]
+                    var = parameter[para]
+                    f = z3.And(var > low, var < up)
+                    solver.add(f)
+                match solver.check():
+                    case z3.sat:
+                        macro.state = transition.to_state
+                        return macro 
+                    case z3.unsat:
+                        pass 
+    if len(path) == 0:
+        return macro_state.state in aut.final_states
+    else:
+        vertex = path.pop(0)
+        state = macro_state.state 
+        vertex_atrribute = attr.attribute_map[vertex]
+
+        transitions: List[AutomatonTransition] = list(filter(lambda x: x.from_state == state, aut.transitions))
+            ## Diverge Cases ####
+        if len(transitions) == 1:
+                curr = substitute(transitions[0].formula, vertex_atrribute)
+                if curr == True:
+                    macro_state.state = transitions[0].to_state
+                    return explore_with_macro_state(path, attr, aut, )
+                return z3.And(curr, explore_path(path, transitions[0].to_state,attr, aut, var_dict))
+        elif len(transitions) == 0:
+                acc = state in aut.final_states 
+                return z3.BoolVal(acc)
+        else:
+                braches = list(map(
+                        lambda x: z3.And(substitute(x.formula, vertex_atrribute), explore_path(path, x.to_state, attr, aut, var_dict)),
+                                   transitions))
+                return z3.Or(braches)
+
+def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton, parameter) -> bool:
+  pass  
+
+
+
+
+
+
+
+
 def create_global_var(var_name, type):
         if type == "Real":
             return z3.Real(var_name)
