@@ -181,7 +181,6 @@ def update_macro_state(vertex_attribute,
                         else:
                             curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
                 solver.add(curr)
-                ####check if current state is sat with the constraint ####
                 match solver.check():
                     case z3.unsat:
                         return None 

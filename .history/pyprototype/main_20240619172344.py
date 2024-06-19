@@ -1,7 +1,7 @@
 # !/bin/env python3
 import json
 import z3
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict 
 from dataclasses import dataclass 
 import string 
 class Graph:
@@ -166,7 +166,7 @@ def update_macro_state(vertex_attribute,
                        attr: NodeAttributes,  
                        macro:MacroState, 
                        transition:AutomatonTransition, 
-                       parameter) -> Optional[MacroState]:
+                       parameter) -> MacroState:
                 solver = z3.Optimize()
                 formula = transition.formula
                 curr = z3.parse_smt2_string(formula,decls=parameter)[0]
@@ -180,17 +180,12 @@ def update_macro_state(vertex_attribute,
                            curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
                         else:
                             curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
-                solver.add(curr)
-                ####check if current state is sat with the constraint ####
-                match solver.check():
-                    case z3.unsat:
-                        return None 
-                    case z3.sat:
-                        pass 
-                ### To solve the upper bound 
+                
+                ### To solve the lower bound 
                 for para in macro.para_upper_bound.keys():
                     var = parameter[para]
-                    solver.maximize(var)
+                    solver.minimize(var)
+                solver.check()
                 m = solver.model()
                 for para in macro.para_upper_bound.keys():
                     var = parameter[para]
@@ -202,24 +197,13 @@ def update_macro_state(vertex_attribute,
                         macro.para_upper_bound[para] = val
                     
 
-                ### To solve the lower bound 
-                for para in macro.para_lower_bound.keys():
-                    var = parameter[para]
-                    solver.minimize(var)
-                solver.check()
-                m = solver.model()
-                for para in macro.para_lower_bound.keys():
-                    var = parameter[para]
-                    val = float(m.evaluate(var).as_decimal(5))
-                    bound = macro.para_lower_bound[para]
-                    if bound > val:
-                        pass
-                    else: 
-                        macro.para_lower_bound[para] = val
-                    
-                #MODIFY STATE 
-                macro.state = transition.to_state
-                return macro
+                ### To solve the upper bound 
+                match solver.check():
+                    case z3.sat:
+                        macro.state = transition.to_state
+                        return macro 
+                    case z3.unsat:
+                        pass 
 
 def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
     if len(path) == 0:

@@ -1,7 +1,7 @@
 # !/bin/env python3
 import json
 import z3
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict 
 from dataclasses import dataclass 
 import string 
 class Graph:
@@ -153,21 +153,16 @@ def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, v
         case _:
             return solver.check()
 
-VarBound = Dict[str, int]
+VarBound = Dict[str, Tuple[int, int]]
 @dataclass
 class MacroState:
     state: str 
     vars: Dict 
-    para_upper_bound: VarBound 
-    para_lower_bound: VarBound 
+    para_bound: VarBound 
 
-
-def update_macro_state(vertex_attribute,
-                       attr: NodeAttributes,  
-                       macro:MacroState, 
-                       transition:AutomatonTransition, 
-                       parameter) -> Optional[MacroState]:
-                solver = z3.Optimize()
+def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
+    def update_macro_state(vertex_attribute, macro:MacroState, transition:AutomatonTransition) -> MacroState:
+                solver = z3.Solver()
                 formula = transition.formula
                 curr = z3.parse_smt2_string(formula,decls=parameter)[0]
                 keys = list(attr.alphabet.keys())
@@ -175,53 +170,23 @@ def update_macro_state(vertex_attribute,
                     attribute = keys[index]
                     if vertex_attribute[index] != None:
                         var_name = attr.alphabet[attribute]
-                        val = vertex_attribute[index]
+                        val = vertex_atrribute[index]
                         if isinstance(val, str):
                            curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
                         else:
                             curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
-                solver.add(curr)
-                ####check if current state is sat with the constraint ####
+                
+                for para in macro.para_bound.keys():
+                    low, up = macro.para_bound[para]
+                    var = parameter[para]
+                    f = z3.And(var > low, var < up)
+                    solver.add(f)
                 match solver.check():
-                    case z3.unsat:
-                        return None 
                     case z3.sat:
+                        macro.state = transition.to_state
+                        return macro 
+                    case z3.unsat:
                         pass 
-                ### To solve the upper bound 
-                for para in macro.para_upper_bound.keys():
-                    var = parameter[para]
-                    solver.maximize(var)
-                m = solver.model()
-                for para in macro.para_upper_bound.keys():
-                    var = parameter[para]
-                    val = float(m.evaluate(var).as_decimal(5))
-                    bound = macro.para_upper_bound[para]
-                    if bound < val:
-                        pass
-                    else: 
-                        macro.para_upper_bound[para] = val
-                    
-
-                ### To solve the lower bound 
-                for para in macro.para_lower_bound.keys():
-                    var = parameter[para]
-                    solver.minimize(var)
-                solver.check()
-                m = solver.model()
-                for para in macro.para_lower_bound.keys():
-                    var = parameter[para]
-                    val = float(m.evaluate(var).as_decimal(5))
-                    bound = macro.para_lower_bound[para]
-                    if bound > val:
-                        pass
-                    else: 
-                        macro.para_lower_bound[para] = val
-                    
-                #MODIFY STATE 
-                macro.state = transition.to_state
-                return macro
-
-def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
     if len(path) == 0:
         return macro_state.state in aut.final_states
     else:
@@ -230,21 +195,16 @@ def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, m
         vertex_atrribute = attr.attribute_map[vertex]
 
         transitions: List[AutomatonTransition] = list(filter(lambda x: x.from_state == state, aut.transitions))
-        
-        ## Only one successor  ####
+            ## Diverge Cases ####
         if len(transitions) == 1:
                 curr = substitute(transitions[0].formula, vertex_atrribute)
                 if curr == True:
                     macro_state.state = transitions[0].to_state
                     return explore_with_macro_state(path, attr, aut, )
                 return z3.And(curr, explore_path(path, transitions[0].to_state,attr, aut, var_dict))
-        
-        ## The transition is stucked  ####
         elif len(transitions) == 0:
                 acc = state in aut.final_states 
                 return z3.BoolVal(acc)
-        
-        ## Multiple transitions ####
         else:
                 braches = list(map(
                         lambda x: z3.And(substitute(x.formula, vertex_atrribute), explore_path(path, x.to_state, attr, aut, var_dict)),
