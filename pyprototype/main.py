@@ -160,9 +160,13 @@ class MacroState:
     vars: Dict 
     para_bound: VarBound 
 
-def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
-    def update_macro_state(vertex_attribute, macro:MacroState, transition:AutomatonTransition) -> MacroState:
-                solver = z3.Solver()
+
+def update_macro_state(vertex_attribute,
+                       attr: NodeAttributes,  
+                       macro:MacroState, 
+                       transition:AutomatonTransition, 
+                       parameter) -> MacroState:
+                solver = z3.Optimize()
                 formula = transition.formula
                 curr = z3.parse_smt2_string(formula,decls=parameter)[0]
                 keys = list(attr.alphabet.keys())
@@ -170,7 +174,7 @@ def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, m
                     attribute = keys[index]
                     if vertex_attribute[index] != None:
                         var_name = attr.alphabet[attribute]
-                        val = vertex_atrribute[index]
+                        val = vertex_attribute[index]
                         if isinstance(val, str):
                            curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
                         else:
@@ -186,7 +190,9 @@ def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, m
                         macro.state = transition.to_state
                         return macro 
                     case z3.unsat:
-                        pass 
+                        
+
+def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
     if len(path) == 0:
         return macro_state.state in aut.final_states
     else:
