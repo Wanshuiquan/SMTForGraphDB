@@ -3,6 +3,7 @@ import json
 import z3
 from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass 
+from  functools import reduce 
 import string 
 class Graph:
     def __init__(self):
@@ -187,6 +188,7 @@ def update_macro_state(vertex_attribute,
                         return None 
                     case z3.sat:
                         pass 
+                
                 ### To solve the upper bound 
                 for para in macro.para_upper_bound.keys():
                     var = parameter[para]
@@ -216,12 +218,17 @@ def update_macro_state(vertex_attribute,
                         pass
                     else: 
                         macro.para_lower_bound[para] = val
-                    
+                
+
                 #MODIFY STATE 
                 macro.state = transition.to_state
                 return macro
 
-def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, macro_state:MacroState, parameter):
+def explore_with_macro_state(path:List[str],
+                             attr:NodeAttributes,
+                             aut:Automaton, 
+                             macro_state:MacroState, 
+                             parameter):
     if len(path) == 0:
         return macro_state.state in aut.final_states
     else:
@@ -233,11 +240,11 @@ def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, m
         
         ## Only one successor  ####
         if len(transitions) == 1:
-                curr = substitute(transitions[0].formula, vertex_atrribute)
-                if curr == True:
-                    macro_state.state = transitions[0].to_state
-                    return explore_with_macro_state(path, attr, aut, )
-                return z3.And(curr, explore_path(path, transitions[0].to_state,attr, aut, var_dict))
+                new_macro_state = update_macro_state(vertex_atrribute, attr,macro_state,transitions[0], parameter)
+                if new_macro_state is None:
+                    return False 
+                else:
+                    return explore_with_macro_state(path, attr, aut, new_macro_state, parameter)
         
         ## The transition is stucked  ####
         elif len(transitions) == 0:
@@ -247,12 +254,26 @@ def explore_with_macro_state(path:List[str],attr:NodeAttributes,aut:Automaton, m
         ## Multiple transitions ####
         else:
                 braches = list(map(
-                        lambda x: z3.And(substitute(x.formula, vertex_atrribute), explore_path(path, x.to_state, attr, aut, var_dict)),
+                    lambda x: update_macro_state(vertex_atrribute, attr, macro_state,x ,parameter), 
                                    transitions))
-                return z3.Or(braches)
+                valid_branch = filter(
+                    lambda x : x is not None, braches
+                )
+                
+                return reduce(
+                    lambda x, y : x or y, 
+                    map(
+                        lambda x: explore_with_macro_state(path, attr, aut,x, parameter), 
+                        valid_branch
+                    )
+                )
 
 def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton, parameter) -> bool:
-  pass  
+  macro_state = MacroState(
+      aut.initial_state, 
+      parameter, 
+      
+  )
 
 
 
