@@ -193,15 +193,21 @@ def update_macro_state(vertex_attribute,
                 for para in macro.para_upper_bound.keys():
                     var = parameter[para]
                     solver.maximize(var)
+                solver.check()
                 m = solver.model()
                 for para in macro.para_upper_bound.keys():
+                    
                     var = parameter[para]
-                    val = float(m.evaluate(var).as_decimal(5))
-                    bound = macro.para_upper_bound[para]
-                    if bound < val:
-                        pass
-                    else: 
-                        macro.para_upper_bound[para] = val
+                    value = m.evaluate(var)
+                    if isinstance(value, z3.ArithRef):
+                        continue 
+                    else:
+                        val = float(m.evaluate(var).as_decimal(5))
+                        bound = macro.para_upper_bound[para]
+                        if bound < val:
+                            pass
+                        else: 
+                            macro.para_upper_bound[para] = val
                     
 
                 ### To solve the lower bound 
@@ -212,13 +218,17 @@ def update_macro_state(vertex_attribute,
                 m = solver.model()
                 for para in macro.para_lower_bound.keys():
                     var = parameter[para]
-                    val = float(m.evaluate(var).as_decimal(5))
-                    bound = macro.para_lower_bound[para]
-                    if bound > val:
-                        pass
-                    else: 
-                        macro.para_lower_bound[para] = val
-                
+                    value = m.evaluate(var)
+                    if isinstance(value, z3.ArithRef):
+                        continue 
+                    else:
+                        val = float(m.evaluate(var).as_decimal(5))
+                        bound = macro.para_lower_bound[para]
+                        if bound > val:
+                            pass
+                        else: 
+                            macro.para_lower_bound[para] = val
+                                    
 
                 #MODIFY STATE 
                 macro.state = transition.to_state
@@ -254,26 +264,31 @@ def explore_with_macro_state(path:List[str],
         ## Multiple transitions ####
         else:
                 braches = list(map(
-                    lambda x: update_macro_state(vertex_atrribute, attr, macro_state,x ,parameter), 
+                    lambda x: update_macro_state(vertex_atrribute, attr, macro_state, x ,parameter), 
                                    transitions))
                 valid_branch = filter(
                     lambda x : x is not None, braches
                 )
                 
-                return reduce(
-                    lambda x, y : x or y, 
-                    map(
+                result =  list(map(
                         lambda x: explore_with_macro_state(path, attr, aut,x, parameter), 
                         valid_branch
-                    )
-                )
+                    ))
+                return reduce(lambda x,y: x or y, result)
 
 def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton, parameter) -> bool:
+  upper_bound = {}
+  lower_bound = {} 
+  for var in parameter.keys():
+      upper_bound[var] = 0
+      lower_bound[var] = 0
   macro_state = MacroState(
       aut.initial_state, 
-      parameter, 
-      
+      merge_dicts(attr.alphabet, parameter), 
+      upper_bound,
+      lower_bound      
   )
+  return explore_with_macro_state(path, attr, aut, macro_state, merge_dicts(attr.alphabet, parameter))
 
 
 
@@ -337,7 +352,7 @@ def parse_json_file(file_path):
 
 if __name__ == '__main__':
     solver = z3.Solver()
-    file_path = 'example2.json'  # Path to your JSON file
+    file_path = 'example1.json'  # Path to your JSON file
 
     # Parse JSON file
     parsed_graph, parsed_attributes, parsed_automaton, global_vars = parse_json_file(file_path)
@@ -350,7 +365,7 @@ if __name__ == '__main__':
     print("Formula: ", parsed_automaton.transitions[0].formula)
     print("Global Vars", global_vars)
     all_variables = merge_dicts(parsed_attributes.alphabet, global_vars)
-    print("Query:", query_naive_algorithm(['1','2','3','4'],  parsed_attributes, parsed_automaton, all_variables) )
+    print("Query:", query_with_macro_state(['1','2','3'],  parsed_attributes, parsed_automaton, global_vars) )
 
     # Parse smt2 string with declared vars; returns vector of assertions, in our case always 1
     test0 = z3.parse_smt2_string(parsed_automaton.transitions[0].formula, decls=all_variables)[0]
@@ -371,4 +386,6 @@ if __name__ == '__main__':
     # test0[0] is the first assert in the z3 ast vector
     expr2 = z3.substitute(test0, (test4, z3.RealVal(2.0)))
     print("Substitute age by 2: ", expr2)
+    solver.add(expr2)
+    solver.check()
 

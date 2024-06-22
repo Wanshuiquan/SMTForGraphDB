@@ -28,16 +28,16 @@
     "Transitions": [
       {
         "from": 1,
-        "to": 1,
-        "formula": "(assert(and (> age p1)(< age 1)))"
+        "to": 2,
+        "formula": "(assert(and (> p1 age)(> 1 p1)))"
       },
       {
-        "from": 1,
-        "to": 2,
-        "formula": "(assert(= name \"John\"))"
+        "from": 2,
+        "to": 1,
+        "formula": "(assert(>= p2 0))"
       }
     ],
-    "Final States": [1, 2]
+    "Final States": [ 2]
   },
   "Global Variables": {
     "p1": "Real",
