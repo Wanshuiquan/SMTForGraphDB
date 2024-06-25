@@ -29,7 +29,7 @@
       {
         "from": 1,
         "to": 2,
-        "formula": "(assert(and (> p1 age)(> 1 p1)))"
+        "formula": "(assert(and (> p1 age)(> p1 1)))"
       },
       {
         "from": 2,
