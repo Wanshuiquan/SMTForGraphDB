@@ -18,26 +18,26 @@
       "hobby" : "None"
     },
     "3": {
-      "age": 35,
+      "age": 80,
       "name": "Bob",
       "hobby" : "Paint"
     }
   },
-  "Automaton": {
+"Automaton": {
     "Initial State": 1,
     "Transitions": [
       {
         "from": 1,
         "to": 2,
-        "formula": "(assert(and (> p1 age)(> p1 1)))"
+        "formula": "(assert(and (> age p1)(> p1 10)))"
       },
       {
         "from": 2,
         "to": 1,
-        "formula": "(assert(>= p2 0))"
+        "formula": "(assert(> p1 200000))"
       }
     ],
-    "Final States": [ 2]
+    "Final States": [1]
   },
   "Global Variables": {
     "p1": "Real",
