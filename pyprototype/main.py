@@ -170,7 +170,12 @@ def update_macro_state(vertex_attribute,
                        transition:AutomatonTransition, 
                        parameter) -> Optional[MacroState]:
                 bound_vector =  z3.AstVector()
-                for var in parameter.keys():
+                formula = transition.formula
+                varset = list(filter(
+                    lambda x: x in formula, 
+                    parameter.keys()
+                ))
+                for var in varset:
                     if var in macro.para_lower_bound:
                         variable = parameter[var]
                         upper = macro.para_upper_bound[var]
@@ -208,7 +213,7 @@ def update_macro_state(vertex_attribute,
                 if len(bound_vector) > 0:
                     upper_bound_solver.add(bound_vector)
                 upper_bound_solver.add(curr)
-                for para in parameter.keys():
+                for para in varset:
                     var = parameter[para]
                     upper_bound_solver.maximize(var)
                 upper_bound_solver.check()
@@ -229,7 +234,7 @@ def update_macro_state(vertex_attribute,
                 if len(bound_vector) > 0:
                     lower_bound_solver.add(bound_vector)
                 lower_bound_solver.add(curr)
-                for para in parameter.keys():
+                for para in varset:
                     var = parameter[para]
                     lower_bound_solver.minimize(var)
                 lower_bound_solver.check()
