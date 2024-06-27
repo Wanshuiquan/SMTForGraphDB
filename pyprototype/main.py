@@ -169,13 +169,13 @@ def update_macro_state(vertex_attribute,
                        macro:MacroState, 
                        transition:AutomatonTransition, 
                        parameter) -> Optional[MacroState]:
-                solver = z3.Optimize()
+                bound_vector =  z3.AstVector()
                 for var in parameter.keys():
                     if var in macro.para_lower_bound:
                         variable = parameter[var]
                         upper = macro.para_upper_bound[var]
                         lower = macro.para_lower_bound[var]
-                        solver.add(z3.And(variable<= upper, variable>= lower))
+                        bound_vector.push(z3.And(variable<= upper, variable>= lower))
                 formula = transition.formula
                 curr = z3.parse_smt2_string(formula,decls=merge_dicts(parameter, attr.alphabet))[0]
                 keys = list(attr.alphabet.keys())
@@ -189,22 +189,30 @@ def update_macro_state(vertex_attribute,
                            curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
                         else:
                             curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
-                solver.add(curr)
-                print(solver.assertions())
+
+                ################ Test the satisfiability ######3
+                sat_solver = z3.Solver()
+                sat_solver.add(bound_vector)
+                sat_solver.add(curr)
+                print(sat_solver.assertions())
 
                 ####check if current state is sat with the constraint ####
-                match solver.check():
+                match sat_solver.check():
                     case z3.unsat:
                         return None 
                     case z3.sat:
                         pass 
                 
                 ### To solve the upper bound 
-                for para in macro.para_upper_bound.keys():
+                upper_bound_solver = z3.Optimize()
+                if len(bound_vector) > 0:
+                    upper_bound_solver.add(bound_vector)
+                upper_bound_solver.add(curr)
+                for para in parameter.keys():
                     var = parameter[para]
-                    solver.maximize(var)
-                solver.check()
-                m = solver.model()
+                    upper_bound_solver.maximize(var)
+                upper_bound_solver.check()
+                m = upper_bound_solver.model()
                 for para in parameter.keys():
                     
                     var = parameter[para]
@@ -216,12 +224,16 @@ def update_macro_state(vertex_attribute,
                         continue
                     
 
-                ### To solve the lower bound 
-                for para in macro.para_lower_bound.keys():
+                ### To solve the lower bound
+                lower_bound_solver = z3.Optimize()
+                if len(bound_vector) > 0:
+                    lower_bound_solver.add(bound_vector)
+                lower_bound_solver.add(curr)
+                for para in parameter.keys():
                     var = parameter[para]
-                    solver.minimize(var)
-                solver.check()
-                m = solver.model()
+                    lower_bound_solver.minimize(var)
+                lower_bound_solver.check()
+                m = lower_bound_solver.model()
                 for para in parameter.keys():
                     var = parameter[para]
                     value = m.evaluate(var)

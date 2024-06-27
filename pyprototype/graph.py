@@ -5,7 +5,7 @@ def generate_attribute():
     random.seed(time.clock_gettime_ns(time.CLOCK_BOOTTIME))
     return random.random() * random.random() * 100
 
-
+Hobby = ["Paint", "Reading", "Hiking", "FKK"] 
 def random_path(sat = True ):
     attribute =  NodeAttributes()
     attribute.alphabet = {
@@ -15,6 +15,10 @@ def random_path(sat = True ):
     }
     if sat: 
         attribute.attribute_map["1"] = (20, "Paint", "Li")
-    
+        attribute.attribute_map["10001"] = (30, "FKK","Li")
+    else: 
+        attribute.attribute_map["1"] = (20, "Paint", "Li")
+        attribute.attribute_map["10001"] = (100, "FKK","Li")
+
 
     
