@@ -1,10 +1,14 @@
 # !/bin/env python3
 import json
 import z3
-from typing import List, Tuple, Dict, Optional
+from typing import List, Tuple, Dict, Optional, Set
 from dataclasses import dataclass 
 from  functools import reduce 
-import string 
+from itertools import product
+import networkx as nx 
+
+EPSILON = z3.Const("epsilon", z3.RealSort())
+
 class Graph:
     def __init__(self):
         self.nodes = set()
@@ -92,85 +96,107 @@ class Automaton:
         transitions_str = "\n".join(str(transition) for transition in self.transitions)
         return f"Initial State: {self.initial_state}, Transitions:\n{transitions_str}, Final States: {self.final_states}"
 
-@dataclass(frozen=True)
-class LIA: ... 
-@dataclass(frozen=True)
-class STR: ...
-def identify_sort(constraint):
-    if "\"" in constraint:
-        return STR()
-    else:
-        return LIA()
 
-# explore path, state   
-#         nil   state ::=  is_final_state(nil)
-#        cons v::p state ::=  curr(v, state) and explore()
-def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_dict):
-        def substitute(formulas, vertex_attribute):
-                curr = z3.parse_smt2_string(formulas,decls=var_dict)[0]
-                keys = list(attr.alphabet.keys())
-                for index in range(len(keys)):
-                    attribute = keys[index]
-                    if vertex_attribute[index] != None:
-                        var_name = attr.alphabet[attribute]
-                        val = vertex_atrribute[index]
-                        if isinstance(val, str):
-                           curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
-                        else:
-                            curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
-                return curr 
-        if len(path) == 0:
-            acc = state in aut.final_states 
-            return z3.BoolVal(acc)
-        else:
-            vertex = path.pop(0)
-            vertex_atrribute = attr.attribute_map[vertex]
 
-            transitions: List[AutomatonTransition] = list(filter(lambda x: x.from_state == state, aut.transitions))
-            ## Diverge Cases ####
-            if len(transitions) == 1:
-                curr = substitute(transitions[0].formula, vertex_atrribute)
-                return z3.And(curr, explore_path(path, transitions[0].to_state,attr, aut, var_dict))
-            elif len(transitions) == 0:
-                acc = state in aut.final_states 
-                return z3.BoolVal(acc)
+# state =  (aut_state, node)
+@dataclass(frozen=True)
+class ProductAut:
+    initial_state: Tuple[str, str]
+    final_state: Set[Tuple]
+    transitions: Dict[Tuple, Tuple[str ,Tuple]]
+    network: nx.Graph
+    node: Set 
+
+    def __str__(self) -> str:
+        result = "Inite State:\n"
+        result += ",".join(map(str, self.initial_state)) + "\n"
+        result = "Finite State:\n"
+        result += ",".join(map(str, self.final_state)) + "\n"
+        result = "Transitions:\n"
+
+        for node in sorted(self.transitions.keys()):
+            result += f"{node}: {', '.join(map(str, self.transitions[node]))}\n"
+        return result
+       
+
+
+def product_graph(aut:Automaton, graph:Graph):
+    aut_state = set(map(
+        lambda x: x.to_state, 
+        aut.transitions
+    ))
+    trans  = {}
+    aut_state.add(aut.initial_state)
+    init_state = list((aut.initial_state, node) for node in graph.nodes)
+    final_states = list(product(aut.final_states, graph.nodes))
+    states = set(product(aut_state, graph.nodes))
+    network = nx.MultiDiGraph()
+    for transition in aut.transitions:
+        from_nodes = set(filter(lambda x: x[0] == transition.from_state, states))
+        for node in from_nodes:
+            if node not in trans:
+                trans[node] = []
+
+            val = trans[node]
+            trans[node] = val + [(transition.formula, (transition.to_state, to_node)) for to_node in graph.adjacency_map[node[1]]]
+            for to_node in graph.adjacency_map[node[1]]:
+                network.add_edge(node,(transition.to_state, to_node), transition.formula)
+    return ProductAut(
+        init_state,
+        final_states,
+        trans,
+        network,
+        graph.nodes
+    )
+
+def get_path(graph:ProductAut, node1, node2):
+ 
+        vertex_queue = []
+        path = []
+        visited = []
+        vertex_queue.append(node1)
+        visited.append(node1)
+        while len(vertex_queue) > 0:
+            source = vertex_queue.pop()
+            succ_list = graph.transitions[source]
+            for transition, succ in succ_list:
+                if succ not in visited:
+                    visited.append(succ)
+                    vertex_queue.append(succ)
+                if succ == node2:
+                    path.append((source,succ, transition ))
+                    break 
+                else:
+                    path.append((source, succ, transition))
+        return path
+#######
+###Every node in path (source, target, formula)
+State = Tuple[int, int]
+Transition = Tuple[State, State, str]
+
+
+def find_all_path(graph: ProductAut, start:str, end:str):
+        # try:
+        #     assert start in graph.node and end in graph.node
+        # except AssertionError as _:
+        #     raise AssertionError("Not valid Nodes")
+        path = []
+        starts = set(filter(lambda x: x[1] == start, graph.initial_state))
+        ends = set(filter(lambda x: x[1] == end, graph.final_state ))
+        for start, end in product(starts, ends):
+            p = sorted(nx.all_simple_edge_paths(graph.network, start, end))
+            if len(p[0]) != 0 and len(p) ==1:
+                path = path + p 
             else:
-                braches = list(map(
-                        lambda x: z3.And(substitute(x.formula, vertex_atrribute), explore_path(path, x.to_state, attr, aut, var_dict)),
-                                   transitions))
-                return z3.Or(braches)
+                p = get_path(graph,start, end)
+                path.append(p) 
+        return path
 
 
+def naive_iter(attr:NodeAttributes, paths:List[List], vars):
 
-def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, vars):
-    solver = z3.Solver()
-    f = explore_path(path, aut.initial_state,attr, aut, vars)
-    solver.add(f)
-    match solver.check():
-        case z3.sat:
-            f = solver.model()
-            print(f)
-            return f 
-        case _:
-            return solver.check()
-
-VarBound = Dict[str, int]
-@dataclass
-class MacroState:
-    state: str 
-    vars: Dict 
-    para_upper_bound: VarBound 
-    para_lower_bound: VarBound 
-
-
-def update_macro_state(vertex_attribute,
-                       attr: NodeAttributes,  
-                       macro:MacroState, 
-                       transition:AutomatonTransition, 
-                       parameter) -> Optional[MacroState]:
-                solver = z3.Optimize()
-                formula = transition.formula
-                curr = z3.parse_smt2_string(formula,decls=parameter)[0]
+    def substitute(formulas, vertex_attribute):
+                curr = z3.parse_smt2_string(formulas,decls=vars)[0]
                 keys = list(attr.alphabet.keys())
                 for index in range(len(keys)):
                     attribute = keys[index]
@@ -181,116 +207,181 @@ def update_macro_state(vertex_attribute,
                            curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
                         else:
                             curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
-                solver.add(curr)
+                return curr 
+
+    formula_vector = []
+    for path in paths:
+        formula = []
+        for source, target, f in path:
+            source_state, source_node = source 
+            attribute = attr.attribute_map[str(source_node)]
+            curr_formula = substitute(f,attribute)
+            formula.append(curr_formula)
+        formula_vector.append(z3.And(formula))
+    if len(formula_vector) == 1:
+        return formula_vector[0]
+    else:
+        return z3.Or(formula_vector)
+
+
+def naive_query(aut:Automaton, graph:Graph, para, source, target, attr:NodeAttributes):
+    vars = merge_dicts(para, attr.alphabet)
+    product_aut = product_graph(aut, graph)
+    path = find_all_path(product_aut, source, target)
+    if len(path) == 0:
+        return z3.unsat
+    formula = naive_iter(attr, path, vars)
+    solver = z3.Solver()
+    solver.add(formula)
+    match solver.check():
+        case z3.sat:
+            return solver.model()
+        case _:
+            return solver.check()
+
+
+
+
+
+
+VarBound = Dict[str, int]
+@dataclass
+class MacroState:
+    vars: Dict 
+    para_upper_bound: VarBound 
+    para_lower_bound: VarBound 
+
+
+def update_macro_state(
+                       attr: NodeAttributes,  
+                       macro:MacroState, 
+                       transition: Transition, 
+                       parameter
+                       ) -> Optional[MacroState]:
+                bound_vector =  z3.AstVector()
+                source , target , formula = transition
+                vertex_attribute = attr.attribute_map[str(source[1])]
+                varset = list(filter(
+                    lambda x: x in formula, 
+                    parameter.keys()
+                ))
+                for var in varset:
+                    if var in macro.para_lower_bound:
+                        variable = parameter[var]
+                        lower = macro.para_lower_bound[var]
+                        bound_vector.push(variable>= lower)
+                    if var in macro.para_upper_bound:
+                        variable = parameter[var]
+                        upper = macro.para_upper_bound[var]
+                        bound_vector.push(variable<= upper)           
+
+                curr = z3.parse_smt2_string(formula,decls=merge_dicts(parameter, attr.alphabet))[0]
+                keys = list(attr.alphabet.keys())
+
+                for index in range(len(keys)):
+                    attribute = keys[index]
+                    if vertex_attribute[index] != None:
+                        var_name = attr.alphabet[attribute]
+                        val = vertex_attribute[index]
+                        if isinstance(val, str):
+                           curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
+                        else:
+                            curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
+
+                ################ Test the satisfiability ######3
+                sat_solver = z3.Solver()
+                if len(bound_vector) > 0:
+                    sat_solver.add(bound_vector)
+                sat_solver.add(curr)
+
                 ####check if current state is sat with the constraint ####
-                match solver.check():
+                match sat_solver.check():
                     case z3.unsat:
-                        return macro 
+                        return None 
                     case z3.sat:
                         pass 
                 
                 ### To solve the upper bound 
-                for para in macro.para_upper_bound.keys():
+                upper_map = {}
+                upper_bound_solver = z3.Optimize()
+                if len(bound_vector) > 0:
+                    upper_bound_solver.add(bound_vector)
+                upper_bound_solver.add(curr)
+                for para in varset:
                     var = parameter[para]
-                    solver.maximize(var)
-                solver.check()
-                m = solver.model()
-                for para in macro.para_upper_bound.keys():
-                    
-                    var = parameter[para]
-                    value = m.evaluate(var)
-                    if isinstance(value, z3.ArithRef):
-                        continue 
-                    else:
-                        val = float(m.evaluate(var).as_decimal(5))
-                        bound = macro.para_upper_bound[para]
-                        if bound < val:
-                            pass
-                        else: 
-                            macro.para_upper_bound[para] = val
+                    upper_map[para] = upper_bound_solver.maximize(var)
+                upper_bound_solver.check()
+                for para in varset:                    
+                    var = upper_map[para]
+                    value = upper_bound_solver.upper(var)                    
+                    value = z3.substitute(value, (EPSILON, z3.RealVal(0.000001)))
+                    value = z3.simplify(value)
+                    if isinstance(value, z3.RatNumRef):
+                        macro.para_upper_bound[para] = value
+
+
                     
 
-                ### To solve the lower bound 
-                for para in macro.para_lower_bound.keys():
+                ### To solve the lower bound
+                lower_map = {}
+                lower_bound_solver = z3.Optimize()
+                if len(bound_vector) > 0:
+                    lower_bound_solver.add(bound_vector)
+                lower_bound_solver.add(curr)
+                for para in varset:
                     var = parameter[para]
-                    solver.minimize(var)
-                solver.check()
-                m = solver.model()
-                for para in macro.para_lower_bound.keys():
-                    var = parameter[para]
-                    value = m.evaluate(var)
-                    if isinstance(value, z3.ArithRef):
-                        continue 
-                    else:
-                        val = float(m.evaluate(var).as_decimal(5))
-                        bound = macro.para_lower_bound[para]
-                        if bound > val:
-                            pass
-                        else: 
-                            macro.para_lower_bound[para] = val
-                                    
+                    lower_map[para] = lower_bound_solver.minimize(var)
+                lower_bound_solver.check()
+                for para in varset:
+                    var = lower_map[para]
+                    value = lower_bound_solver.lower(var)
+                    value = z3.substitute(value, (EPSILON, z3.RealVal(0.000001)))
+                    value = z3.simplify(value)
+                    if isinstance(value, z3.RatNumRef):
+                        macro.para_lower_bound[para] = value
+                        
 
                 #MODIFY STATE 
-                macro.state = transition.to_state
                 return macro
 
-def explore_with_macro_state(path:List[str],
+def explore_one_path(path:List[Transition],
                              attr:NodeAttributes,
-                             aut:Automaton, 
                              macro_state:MacroState, 
                              parameter):
-    if len(path) == 0:
-        return macro_state.state in aut.final_states
-    else:
-        vertex = path.pop(0)
-        state = macro_state.state 
-        vertex_atrribute = attr.attribute_map[vertex]
-
-        transitions: List[AutomatonTransition] = list(filter(lambda x: x.from_state == state, aut.transitions))
-        
-        ## Only one successor  ####
-        if len(transitions) == 1:
-                new_macro_state = update_macro_state(vertex_atrribute, attr,macro_state,transitions[0], parameter)
-                if new_macro_state is None:
-                    return False 
-                else:
-                    return explore_with_macro_state(path, attr, aut, new_macro_state, parameter)
-        
-        ## The transition is stucked  ####
-        elif len(transitions) == 0:
-                acc = state in aut.final_states 
-                return z3.BoolVal(acc)
-        
-        ## Multiple transitions ####
+    for transition in path:
+        macro_state = update_macro_state(attr,macro_state, transition, parameter)
+        if macro_state is None:
+            return z3.unsat 
+    bound = []
+    for var in parameter.keys():
+        if var in macro_state.para_lower_bound:
+            lower = macro_state.para_lower_bound[var].as_decimal(3)
+        else: 
+            lower =  ()
+        if var in macro_state.para_upper_bound:
+            upper = macro_state.para_upper_bound[var].as_decimal(3)
         else:
-                braches = list(map(
-                    lambda x: update_macro_state(vertex_atrribute, attr, macro_state, x ,parameter), 
-                                   transitions))
-                valid_branch = filter(
-                    lambda x : x is not None, braches
-                )
-                
-                result =  list(map(
-                        lambda x: explore_with_macro_state(path, attr, aut,x, parameter), 
-                        valid_branch
-                    ))
-                return reduce(lambda x,y: x or y, result)
+            upper = ()
+        bound.append((var,lower,upper))
+    return bound 
 
-def query_with_macro_state(path:List[int], attr:NodeAttributes, aut:Automaton, parameter) -> bool:
-  upper_bound = {}
-  lower_bound = {} 
-  for var in parameter.keys():
-      upper_bound[var] = 0
-      lower_bound[var] = 0
-  macro_state = MacroState(
-      aut.initial_state, 
+def query_with_macro_state(graph:Graph, attr:NodeAttributes, aut:Automaton, source, target, parameter) -> bool:
+    upper_bound = {}
+    lower_bound = {} 
+    macro_state = MacroState(
       merge_dicts(attr.alphabet, parameter), 
       upper_bound,
       lower_bound      
   )
-  return explore_with_macro_state(path, attr, aut, macro_state, merge_dicts(attr.alphabet, parameter))
-
-
+    pg = product_graph(aut,graph)
+    paths = find_all_path(pg,source, target)
+    for path in paths:
+        result =  explore_one_path(path, attr, macro_state, parameter)
+        if result == z3.unsat:
+            pass 
+        else:
+            return result 
+    return z3.unsat
 
 
 

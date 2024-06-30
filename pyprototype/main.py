@@ -1,10 +1,11 @@
 # !/bin/env python3
+from itertools import product
 import json
 import z3
-from typing import List, Tuple, Dict, Optional
+from typing import List, Set, Tuple, Dict, Optional
 from dataclasses import dataclass 
-from  functools import reduce 
-import string 
+from  functools import reduce
+import networkx as nx
 class Graph:
     def __init__(self):
         self.nodes = set()
@@ -92,16 +93,10 @@ class Automaton:
         transitions_str = "\n".join(str(transition) for transition in self.transitions)
         return f"Initial State: {self.initial_state}, Transitions:\n{transitions_str}, Final States: {self.final_states}"
 
-@dataclass(frozen=True)
-class LIA: ... 
-@dataclass(frozen=True)
-class STR: ...
-def identify_sort(constraint):
-    if "\"" in constraint:
-        return STR()
-    else:
-        return LIA()
 
+
+
+####Naive Recursive Algorithm #####
 # explore path, state   
 #         nil   state ::=  is_final_state(nil)
 #        cons v::p state ::=  curr(v, state) and explore()
@@ -113,7 +108,7 @@ def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_d
                     attribute = keys[index]
                     if vertex_attribute[index] != None:
                         var_name = attr.alphabet[attribute]
-                        val = vertex_atrribute[index]
+                        val = vertex_attribute[index]
                         if isinstance(val, str):
                            curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
                         else:
@@ -135,18 +130,19 @@ def explore_path(path:List[int],state, attr:NodeAttributes, aut:Automaton, var_d
                 acc = state in aut.final_states 
                 return z3.BoolVal(acc)
             else:
-                braches = list(map(
+                
+                return z3.Or(
+                    list(map(
                         lambda x: z3.And(substitute(x.formula, vertex_atrribute), explore_path(path, x.to_state, attr, aut, var_dict)),
                                    transitions))
-                return z3.Or(braches)
-
-
+                )
 
 def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, vars):
     solver = z3.Solver()
-    f = explore_path(path, aut.initial_state,attr, aut, vars)
-    solver.add(f)
+    f = explore_path(path, attr, vars)
+    # solver.add(f)
     print(f)
+    solver.add(f)
     match solver.check():
         case z3.sat:
             f = solver.model()
@@ -154,6 +150,149 @@ def query_naive_algorithm(path:List[int], attr: NodeAttributes, aut:Automaton, v
             return f 
         case _:
             return solver.check()
+#######Naive Iteration Algorithm################
+# state =  (aut_state, node)
+@dataclass(frozen=True)
+class ProductAut:
+    initial_state: Tuple[str, str]
+    final_state: Set[Tuple]
+    transitions: Dict[Tuple, Tuple[str ,Tuple]]
+    network: nx.Graph
+    node: Set 
+
+    def __str__(self) -> str:
+        result = "Inite State:\n"
+        result += ",".join(map(str, self.initial_state)) + "\n"
+        result = "Finite State:\n"
+        result += ",".join(map(str, self.final_state)) + "\n"
+        result = "Transitions:\n"
+
+        for node in sorted(self.transitions.keys()):
+            result += f"{node}: {', '.join(map(str, self.transitions[node]))}\n"
+        return result
+       
+
+
+def product_graph(aut:Automaton, graph:Graph):
+    aut_state = set(map(
+        lambda x: x.to_state, 
+        aut.transitions
+    ))
+    trans  = {}
+    aut_state.add(aut.initial_state)
+    init_state = list((aut.initial_state, node) for node in graph.nodes)
+    final_states = list(product(aut.final_states, graph.nodes))
+    states = set(product(aut_state, graph.nodes))
+    network = nx.MultiDiGraph()
+    for transition in aut.transitions:
+        print(transition)
+        from_nodes = set(filter(lambda x: x[0] == transition.from_state, states))
+        for node in from_nodes:
+            if node not in trans:
+                trans[node] = []
+
+            val = trans[node]
+            trans[node] = val + [(transition.formula, (transition.to_state, to_node)) for to_node in graph.adjacency_map[node[1]]]
+            for to_node in graph.adjacency_map[node[1]]:
+                network.add_edge(node,(transition.to_state, to_node), transition.formula)
+    return ProductAut(
+        init_state,
+        final_states,
+        trans,
+        network,
+        graph.nodes
+    )
+
+def get_path(graph:ProductAut, node1, node2):
+ 
+        vertex_queue = []
+        path = []
+        visited = []
+        vertex_queue.append(node1)
+        visited.append(node1)
+        while len(vertex_queue) > 0:
+            source = vertex_queue.pop()
+            succ_list = graph.transitions[source]
+            for transition, succ in succ_list:
+                if succ not in visited:
+                    visited.append(succ)
+                    vertex_queue.append(succ)
+                if succ == node2:
+                    path.append((source,succ, transition ))
+                    break 
+                else:
+                    path.append((source, succ, transition))
+        return path
+#######
+###Every node in path (source, target, formula)
+def find_all_path(graph: ProductAut, start:str, end:str):
+        # try:
+        #     assert start in graph.node and end in graph.node
+        # except AssertionError as _:
+        #     raise AssertionError("Not valid Nodes")
+        path = []
+        starts = set(filter(lambda x: x[1] == start, graph.initial_state))
+        ends = set(filter(lambda x: x[1] == end, graph.final_state ))
+        for start, end in product(starts, ends):
+            p = sorted(nx.all_simple_edge_paths(graph.network, start, end))
+            if len(p[0]) != 0 and len(p) ==1:
+                path = path + p 
+            else:
+                p = get_path(graph,start, end)
+                path.append(p) 
+        return path
+
+
+def naive_iter(attr:NodeAttributes, paths:List[List], vars):
+
+    def substitute(formulas, vertex_attribute):
+                curr = z3.parse_smt2_string(formulas,decls=vars)[0]
+                keys = list(attr.alphabet.keys())
+                for index in range(len(keys)):
+                    attribute = keys[index]
+                    if vertex_attribute[index] != None:
+                        var_name = attr.alphabet[attribute]
+                        val = vertex_attribute[index]
+                        if isinstance(val, str):
+                           curr = z3.substitute(curr,(var_name, z3.StringVal(val)))
+                        else:
+                            curr = z3.substitute(curr,(var_name, z3.RealVal(val)))
+                return curr 
+
+    formula_vector = []
+    for path in paths:
+        formula = []
+        for source, target, f in path:
+            source_state, source_node = source 
+            attribute = attr.attribute_map[str(source_node)]
+            curr_formula = substitute(f,attribute)
+            formula.append(curr_formula)
+        formula_vector.append(z3.And(formula))
+    print(formula_vector)
+    if len(formula_vector) == 1:
+        return formula_vector[0]
+    else:
+        return z3.Or(formula_vector)
+
+
+def naive_query(aut:Automaton, graph:Graph, para, source, target, attr:NodeAttributes):
+    vars = merge_dicts(para, attr.alphabet)
+    product_aut = product_graph(aut, graph)
+    path = find_all_path(product_aut, source, target)
+    if len(path) == 0:
+        return z3.unsat
+    formula = naive_iter(attr, path, vars)
+    print(formula)
+    solver = z3.Solver()
+    solver.add(formula)
+    match solver.check():
+        case z3.sat:
+            return solver.model()
+        case _:
+            return solver.check()
+
+
+
 
 VarBound = Dict[str, float]
 @dataclass
@@ -218,7 +357,7 @@ def update_macro_state(vertex_attribute,
                     upper_bound_solver.maximize(var)
                 upper_bound_solver.check()
                 m = upper_bound_solver.model()
-                for para in parameter.keys():
+                for para in varset:
                     
                     var = parameter[para]
                     value = m.evaluate(var)
@@ -239,7 +378,7 @@ def update_macro_state(vertex_attribute,
                     lower_bound_solver.minimize(var)
                 lower_bound_solver.check()
                 m = lower_bound_solver.model()
-                for para in parameter.keys():
+                for para in varset:
                     var = parameter[para]
                     value = m.evaluate(var)
                     if isinstance(value, z3.RatNumRef):
@@ -264,20 +403,15 @@ def explore_with_macro_state(path:List[str],
         vertex = path.pop(0)
         state = macro_state.state 
         vertex_atrribute = attr.attribute_map[vertex]
-
         transitions: List[AutomatonTransition] = list(filter(lambda x: x.from_state == state, aut.transitions))
-        
         ## Only one successor  ####
         if len(transitions) == 1:
                 new_macro_state = update_macro_state(vertex_atrribute, attr,macro_state,transitions[0], parameter)                
-
                 return explore_with_macro_state(path, attr, aut, new_macro_state, parameter)
-        
         ## The transition is stucked  ####
         elif len(transitions) == 0:
                 acc = state in aut.final_states 
                 return z3.BoolVal(acc)
-        
         ## Multiple transitions ####
         else:
                 braches = list(map(
@@ -378,7 +512,10 @@ if __name__ == '__main__':
     print("Alphabet: ", parsed_attributes.alphabet)
     print("Global Vars", global_vars)
     all_variables = merge_dicts(parsed_attributes.alphabet, global_vars)
-    print("Query:", query_with_macro_state(['1','2'],  parsed_attributes, parsed_automaton, global_vars) )
+    print("Product", product_graph(parsed_automaton, parsed_graph))
+    print("Path", find_all_path(product_graph(parsed_automaton, parsed_graph),1,3))
+    print("Query:", naive_query(parsed_automaton,parsed_graph, global_vars, 1,3, parsed_attributes) )
+
     # print("Formula: ", parsed_automaton.transitions[0].formula)
 
     # # Parse smt2 string with declared vars; returns vector of assertions, in our case always 1

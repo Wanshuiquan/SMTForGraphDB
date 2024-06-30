@@ -29,12 +29,12 @@
       {
         "from": 1,
         "to": 1,
-        "formula": "(assert(and (> age p1)(> p1 10)))"
+        "formula": "(assert(and (> p1 age)(> p1 10)))"
       },
       {
         "from": 1,
         "to": 2,
-        "formula": "(assert(> p1 75))"
+        "formula": "(assert(>= p1 age))"
       }
     ],
     "Final States": [2]
