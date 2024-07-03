@@ -1,0 +1,5 @@
+*.gz 
+*boost*
+*__pycache__*
+*.history*
+*.vscode*
