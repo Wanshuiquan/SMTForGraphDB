@@ -56,7 +56,7 @@ for i in range(1, 100):
     q2 = naive_query(parsed_automaton,graph,global_vars,0,scale - 1, attr)
     t3 = time.clock_gettime(time.CLOCK_BOOTTIME)
 
-    time_consumption.append((i, t2 - t1, t3-t2, q1, q2))
+    time_consumption.append((i, t2 - t1, t3-t2))
 
-pickle.dump(time_consumption, open('sat.pkl'))
+pickle.dump(time_consumption, open('sat.pkl','wb'))
 

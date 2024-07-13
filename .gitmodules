@@ -1,3 +1,7 @@
 [submodule "MillenniumDB"]
 	path = MillenniumDB
-	url = https://github.com/MillenniumDB/MillenniumDB
+	url = https://github.com/MillenniumDB/MillenniumDB 
+
+[submodule "PyMillDB"]
+   path = PyMillDB
+   url = 
