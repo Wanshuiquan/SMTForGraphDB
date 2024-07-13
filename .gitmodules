@@ -4,4 +4,4 @@
 
 [submodule "PyMillDB"]
    path = PyMillDB
-   url = 
+   url = https://github.com/MillenniumDB/PyMillDB.git
