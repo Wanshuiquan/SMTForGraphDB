@@ -1,0 +1,124 @@
+\documentclass{article}
+\usepackage{graphicx} % Required for inserting images
+\usepackage{amsfonts,amssymb,amsmath,amsthm}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{todonotes}
+\title{Regular Parameterized Query in Millennium DB}
+\author{Heyang Li}
+\date{July 2024}
+\newtheorem{definition}{Definition}
+\begin{document}
+\maketitle
+
+\section*{Problem Overview}
+ 
+In this project, a graph database should have labels on both edges and nodes. 
+\begin{definition}[Graph Database]
+    A graph database $G$ is a tuple $(V, E, \rho, \lambda, Attr, \mu)$, where:
+\begin{itemize}
+    \item $V$ is a finite set of nodes.
+    \item $E$ is a finite set of edges. 
+    \item $\rho: E \to (V \times V)$ is a total function. Intuitively, $\rho(e) = (v_1, v_2)$ means that $e$ is a directed edge going from $v_1$ to $v_2$.
+    \item $\lambda: E \to Lab$ is a total function assigning a label to an edge.
+    \item $Attr$ is a finite set of attributes 
+    \item $\mu: V \times Attr \to Val$, where $Val \subseteq \Sigma^* \cup \mathbb{R}$ 
+\end{itemize}
+\end{definition}
+
+
+\paragraph{Path} a \emph{path} in a graph database $G = (V, E, \rho, \lambda, Attr, \mu)$ from $s$ to $t$ is 
+\[
+s = v_0 \xrightarrow{e_1} v_1 \xrightarrow{e_2} \dots \xrightarrow{e_{k}} v_k = t
+\]
+where $\rho(e_i) = (v_{i-1}, v_i)$.
+%  and we write $lab(p)$ for the sequence of labels 
+% \[
+% lab(p) = \mu(v_0) \lambda(e_1) \mu(v_1) \dots \lambda(e_k) \mu(v_k)
+% \]
+
+\begin{definition}[Regular Query Parameterized Automaton]
+A regular query parameterized automaton is a tuple $(L, \chi, Q, \Sigma, q_0, F, \Delta)$, where: 
+\begin{itemize}
+    \item L is a set of labels 
+    \item $\chi = \mathbb{P} \cup Attr$ is a set of variables, where $\mathbb{P}$ is a set of global real valued variables.
+    \item Q is a finite set of states 
+    \item $q_0$ is the start state, where $q_0$ should not have income transitions. 
+    \item $F$ is a set of final states, where $q_0 \notin F$ and each $q_f \in F$ should not have outcome transitions. 
+    \item We define the transition by
+    \[\Delta \subseteq Q \times (\Sigma \times T(\chi)) \times Q\] 
+    
+    For each $\Delta \in (q, (\sigma, \phi), q')$,  we write $q \xrightarrow{\left( \sigma, \phi \right)} q'$
+
+\end{itemize}
+
+
+\end{definition}
+\paragraph{Parameterized Automaton Query Question:} A regular query problem is defined as following: given a graph database $G = (V, E, \rho, \lambda, Attr, \mu)$, 
+a start point $v \in V$, and a regular query parameterized automaton $A = (L, \chi, Q, \Sigma, q_0, F, \Delta) $, if there exists a path:
+\[
+v \xrightarrow{e_1} v_1 \xrightarrow{e_2} \dots \xrightarrow{e_{k}} v_k 
+\]
+
+And a run of the automaton $A$:
+\[
+q_0 \xrightarrow{(\sigma_1, \phi_1)} q_1 \xrightarrow{(\sigma_2, \phi_2)} \dots \xrightarrow{(\sigma_{k}, \phi_{k})} q_k \in F
+\]
+
+such that 
+\[
+\forall i \in \{1, \dots, k\}: \lambda(e_i) = \sigma_i 
+\]
+and there exists an assignment $A$ for the global parameter, such that 
+\[
+\forall i \in  \{1, \dots, k\}: A \models \phi_i [x/\mu(v_k, x)]
+\]
+
+\section*{The Algorithm}
+Millennium DB implement regular queries based on product graph. Intuitively, the product graph is the product between a graph database and a regular query automaton.
+\paragraph{Product Graph} Given a graph database $G = (V, E, \rho, \lambda, Attr, \mu)$, a regular query parameterized automaton $Aut = (Q, \Sigma, q_0, F, \Delta)$, the product graph $G_{\times}$, is then defined as the graph database.
+$G_{\times} = (V_{\times}, E_{\times}, \rho_{\times}, \lambda_{\times}, Attr_{\times}, \mu_{\times})$, where:
+\begin{itemize}
+    \item $V_{\times} =  V \times Q$
+    \item $E_{\times} = \{(e, (q_1, (\sigma, \phi), q_2) \in E \times \Delta) \mid \lambda(e) = \sigma\}$
+    \item $\rho_{\times}(e, d) = ((x, q_1), (y, q_2))$ if:
+
+                  \quad  $d = (q_1, (\sigma, \phi), q_2)$
+
+                   \quad $\lambda(e) = (\sigma, \phi)$ 
+
+                   \quad $\rho(e) = (x, y)$
+    \item $\lambda(e,d) = \lambda(e)$
+    \item $\mu(v, q) = \mu(q)$
+\end{itemize} 
+
+We use macro states to store the vertex in the product graph and upper bounds and lower bounds of 
+formulas which only contain global parameters.
+\begin{definition}{Macro State}
+    A macro state $S$ is a tuple $(state, upper, lower)$, where 
+    \begin{itemize}
+        \item $state \in V_{\times}$ 
+        \item $upper: T(\chi) \to \mathbb{R}$ is a map which contains upper bounds of formulas.  
+        \item $lower: T(\chi) \to \mathbb{R}$ is a map which contains lower bounds of formulas.
+    \end{itemize}
+\end{definition} 
+
+Given two marco states $S_1 = (state_1, upper_1, lower_1)$ and $S_2 = (state_2, upper_2, lower_2)$. 
+We say $S_1 \models S_2$ if:  
+\begin{itemize}
+    \item $state_1 = state_2$ 
+    \item for each formula $f$, $upper_1(f) \le upper_2(f)$
+    \item for each formula $f$, $lower_1(f) \ge lower_2(f)$
+\end{itemize}
+
+
+
+\begin{algorithm}
+\caption{RPQ in a product graph}
+\begin{algorithmic}
+    
+\end{algorithmic}
+\end{algorithm}
+
+
+\end{document}
