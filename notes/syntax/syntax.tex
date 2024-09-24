@@ -1,15 +1,19 @@
 \documentclass{article}
 \usepackage{graphicx} % Required for inserting images
-\usepackage{amsfonts,amssymb,amsmath,amsthm}
-\usepackage{algpseudocode}
-\usepackage{algorithm}
-\usepackage{todonotes}
-\title{Regular Parameterized Query in Millennium DB}
+\usepackage{simplebnf}
+\title{Syntax of Parameterized Regular Expression}
 \author{Heyang Li}
-\date{July 2024}
-\newtheorem{definition}{Definition}
+\date{August 2024}
+
 \begin{document}
+
 \maketitle
 
-
+\section*{The Syntax of Sparql and MQL Regular Expression}
+We formalize the syntax of Sparql regex used in Mellinnium DB as following:
+\begin{bnfgrammar}
+$E$::= $iri$
+| $ E$ 
+;;
+\end{bnfgrammar}
 \end{document}
