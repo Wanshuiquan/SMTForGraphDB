@@ -2,7 +2,9 @@ from dataclasses import dataclass
 from typing import Set, Dict, Any, Tuple 
 import z3
 from itertools import product
-import networkx as nx 
+from property_graph import PropertyGraph
+
+
 EPSILON = z3.Const("epsilon", z3.RealSort())
 
 @dataclass 
@@ -45,22 +47,8 @@ class ParametricAutomaton:
     transitions: Dict[int, Tuple[Tuple[str, z3.Ast], int]]  # source_state -> ((edge_label, constraint), target_state)
 
 
-@dataclass
-class PropertyGraph:
-    edges: Dict[int, Tuple[Tuple[str, int]]]  # source_node ->  label, target_node)
-    nodes: Set[int] # (node_id, node_type)
-    attribute: Dict[Tuple[int, str], Any]  #node_id, attribute_name -> attribute_value
 
-def generate_property_graph(edge_num:int, node_num:int):
-      """
-      Docstring for generate_property_graph
-      
-      :param edge_num: Description
-      :type edge_num: int
-      :param node_num: Description
-      :type node_num: int
-      """
-
+          
 @dataclass
 class ProductGraph:
     nodes: Set[tuple[int, int]]  # (property_node_id, automaton_state)
@@ -81,3 +69,4 @@ class ProductGraph:
                 for edge_label_g, graph_dst in graph_dsts:
                     if edge_label_a == edge_label_g:
                         self.edges[(prop_node, automaton_state)] = (edge_label_a, constraint, (graph_dst, automaton_dst))            
+     
