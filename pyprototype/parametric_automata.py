@@ -16,16 +16,16 @@ class ParametricAutomaton:
         Transitions: {self.transitions}
 """
 
-def read_json(path):
+def load_automata(path):
     with open(path) as f:
         dic = json.load(f)
-        init = dic["Init"]
+        init = int(dic["Init"])
         global_var = set(dic["Global Variables"])
-        accept = set(dic["Final States"])
+        accept = set(map(int, dic["Final States"]))
         transition = {}
         for ele in dic["Transitions"]:
-           src = ele["from"]
-           dst = ele["to"]
+           src = int(ele["from"])
+           dst = int(ele["to"])
            label =  ele["label"]
            constraint = ele["formula"]
            if src in transition:

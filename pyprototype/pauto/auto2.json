@@ -1,0 +1,22 @@
+{
+    "Init": 1,
+    "Transitions": [
+      {
+        "from": 1,
+        "to": 1,
+        "label": "follow",
+        "formula": "(assert(and (> p1 (* age p1))(> p1 400)))"
+      },
+      {
+        "from": 1,
+        "to": 2,
+        "label": "favorite",
+        "formula": "(assert(>= 500 (* p1 age)))"
+      }
+    ],
+    "Final States": [2],
+     "Global Variables": {
+    "p1": "Real",
+    "p2": "Real"
+  }
+}

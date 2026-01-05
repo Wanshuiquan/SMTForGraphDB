@@ -33,8 +33,8 @@ def to_dict(graph:PropertyGraph):
 def dict_to_graph(d: Dict):
     return PropertyGraph(
         nodes=set(d["nodes"]),
-        edges=d["edges"],
-        attribute=d["attributes"]
+        edges= {int(k): v for k, v in d["edges"].items()},
+        attribute={int(k): v for k, v in d["attributes"].items()}
     )
 def generate_property_graph(edge_num:int, node_num:int) -> PropertyGraph:
       """
@@ -48,14 +48,20 @@ def generate_property_graph(edge_num:int, node_num:int) -> PropertyGraph:
       edge label: follow, favorite, folow-anymously
       """
 
-      random.seed(time.CLOCK_MONOTONIC)
 
       nodes = set([i for i in range(node_num)])
       edges = {}
       attr = {}
       labels = ["follow", "favorite", "followanymously"]
-      pairs = list(product([i for i in range(node_num)], [i for i in range(node_num)]))
-      edge_pairs = random.sample(pairs, edge_num)
+      edge_pairs = []
+      average_degree = edge_num // node_num
+
+      for src in range(node_num):
+          random.seed(time.CLOCK_MONOTONIC)
+
+          dst = random.sample([i for i in range(node_num)], average_degree)
+          for d in dst:
+              edge_pairs.append((src, d))
       for src, dst in edge_pairs:
           label = random.sample(labels, 1)[0]
           if src in edges:

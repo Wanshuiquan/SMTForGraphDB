@@ -13,14 +13,26 @@
         "label": "favorite",
         "formula": "(assert(>= 500 (+ (* p1 age) (* p2 since))))"
       },
-       {
+        {
         "from": 2,
         "to": 3,
+        "label": "favorite",
+        "formula": "(assert(>= 11500 (+ (* p1 age p2) (* p2 since))))"
+      },
+        {
+        "from": 3,
+        "to": 3,
+        "label": "favorite",
+        "formula": "(assert(>= 11500 (+ (* p1 age p2) (* p2 since age))))"
+      },
+       {
+        "from": 3,
+        "to": 4,
         "label": "favorite",
         "formula": "(assert(>= 1500 (+ (* p1 age) (* p2 since))))"
       }
     ],
-    "Final States": [3],
+    "Final States": [4],
      "Global Variables": {
     "p1": "Real",
     "p2": "Real"
