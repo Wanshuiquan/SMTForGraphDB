@@ -1,22 +1,28 @@
 from dataclasses import dataclass 
 from typing import Set, Dict, Any, Tuple 
-import z3
-from itertools import product
 from property_graph import PropertyGraph
 from parametric_automata import ParametricAutomaton
 from sage.all import *
+import z3 
 
-EPSILON = z3.Const("epsilon", z3.RealSort())
+def merge_dicts(dict1, dict2):
+    common_keys = set(dict1.keys()) & set(dict2.keys())
+    if common_keys:
+        raise ValueError(f"Key(s) {common_keys} are present in both dictionaries and would be overwritten")
 
-@dataclass 
-class NRA_Macro_State:
+    return {**dict1, **dict2}
+
+
+@dataclass
+class NRA_Macro_State_Optimizer:
     accumulated_formula: Any
+    globalparam: Set[Any]
     automata_state: int  
     edge_id: int  
     node_id: int 
+    
 
-    def entail(self, other: z3.AstRef, solver: z3.Solver) -> bool:
-        solver.push()
+    def entail(self, other: z3.Ast) -> bool:
         pre_cond = z3.BoolVal(True)
         for f in self.accumulated_formula:
             pre_cond = z3.And(pre_cond, f)
@@ -35,28 +41,17 @@ class NRA_Macro_State:
         result = solver.check() == z3.sat
         solver.pop()
         return result
-    
 
-    def visit_new_constraint(self, new_constraint: z3.Ast, solver:z3.Solver) -> bool:
+        
+    def visit_new_constraint(self, new_constraint: z3.Ast, solver:z3.Solver, optimizer:z3.Optimize) -> bool:
         if self.entail(new_constraint, solver):
             return True
-        elif self.check_consistency(new_constraint, solver):
-                self.accumulated_formula.add(new_constraint)     
+        elif len(self.accumulated_formula) < len(self.globalparam):
+            if self.check_consistency(new_constraint, solver):
+                self.accumulated_formula.add(new_constraint)    
         else:
-            return False
-        
-
-
-        
-
-def merge_dicts(dict1, dict2):
-    common_keys = set(dict1.keys()) & set(dict2.keys())
-    if common_keys:
-        raise ValueError(f"Key(s) {common_keys} are present in both dictionaries and would be overwritten")
-
-    return {**dict1, **dict2}
-          
-
+            pass 
+            
 
 class ProductGraphIter:
     def __init__(self, prop_graph:PropertyGraph, automaton:ParametricAutomaton):
@@ -73,7 +68,7 @@ class ProductGraphIter:
 
 
     def explore(self, start_point: int) -> bool:
-        start_state = NRA_Macro_State(
+        start_state = NRA_Macro_State_Optimizer(
             accumulated_formula = set(),
             automata_state = self.automata.initial_state,
             edge_id = -1,
@@ -108,7 +103,7 @@ class ProductGraphIter:
             for (edge_label_g, graph_dst) in graph_dsts:
                 if edge_label_a == edge_label_g:
                     new_formula = self.substitute(constraint, self.graph.attribute[graph_dst])
-                    new_macro_state = NRA_Macro_State(
+                    new_macro_state = NRA_Macro_State_Optimizer(
                         accumulated_formula = current_macro_state.accumulated_formula.copy(),
                         automata_state = dst_state,
                         edge_id = edge_label_a,
