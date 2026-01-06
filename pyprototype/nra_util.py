@@ -4,7 +4,6 @@ import z3
 from itertools import product
 from property_graph import PropertyGraph
 from parametric_automata import ParametricAutomaton
-from sage.all import *
 
 EPSILON = z3.Const("epsilon", z3.RealSort())
 
