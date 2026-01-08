@@ -18,7 +18,7 @@ class NRA_Macro_State_Optimizer:
     accumulated_formula: Any
     globalparam: Set[Any]
     automata_state: int  
-    edge_id: int  
+    edge_id: int 
     node_id: int 
     
 

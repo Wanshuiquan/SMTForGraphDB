@@ -28,7 +28,7 @@
        {
         "from": 3,
         "to": 4,
-        "label": "favorite",
+        "label": "follow",
         "formula": "(assert(>= 1500 (+ (* p1 age) (* p2 since))))"
       }
     ],
